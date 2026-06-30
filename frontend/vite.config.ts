@@ -6,6 +6,7 @@ export default defineConfig({
   server: {
     host: true,
     port: 3000,
+    allowedHosts: ["cae.simulearn.cn", "localhost", ".simulearn.cn"],
     proxy: {
       "/api": {
         target: "http://backend:8000",
