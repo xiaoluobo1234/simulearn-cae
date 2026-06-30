@@ -164,12 +164,15 @@ def _gmsh_step_to_obj(step_bytes: bytes, mesh_size: float, with_groups: bool = T
 
             part_name = f"Part_{tag}"
             faces = []
-            face_dimtags = gmsh.model.getBoundary([dim_tag], combined=False)
+            face_dimtags = gmsh.model.getBoundary([dim_tag], combined=True)
             for fd, ft in face_dimtags:
+                if ft < 0: continue  # Skip invalid entities
                 face_id = f"face_{tag}_{ft}"
-                # Get face area (approximate via bounding box)
-                fb = gmsh.model.occ.getBoundingBox(fd, ft)
-                area = (fb[1] - fb[0]) * (fb[3] - fb[2])
+                try:
+                    fb = gmsh.model.occ.getBoundingBox(fd, ft)
+                    area = (fb[1] - fb[0]) * (fb[3] - fb[2])
+                except Exception:
+                    area = 0.0
                 faces.append({"id": face_id, "area": round(area, 2)})
 
             parts.append({"name": part_name, "tag": tag, "faces": faces})
