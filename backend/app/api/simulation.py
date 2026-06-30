@@ -129,7 +129,6 @@ def _gmsh_step_to_obj(step_bytes: bytes, mesh_size: float, with_groups: bool = T
     gmsh.option.setNumber("General.Verbosity", 0)
 
     try:
-        # Write STEP to temp file
         with tempfile.NamedTemporaryFile(suffix=".step", delete=False) as tmp:
             tmp.write(step_bytes)
             step_path = tmp.name
@@ -137,36 +136,27 @@ def _gmsh_step_to_obj(step_bytes: bytes, mesh_size: float, with_groups: bool = T
         gmsh.model.occ.importShapes(step_path)
         gmsh.model.occ.synchronize()
 
-        # Get all entities
         entities = gmsh.model.getEntities()
         parts = []
         bbox = {"x": [0, 0], "y": [0, 0], "z": [0, 0]}
 
         for dim_tag in entities:
             dim, tag = dim_tag
-            if dim != 3:
-                continue  # Skip non-solid entities
+            if dim != 3: continue
 
-            # Get bounding box
             b = gmsh.model.occ.getBoundingBox(dim, tag)
-            if b[0] < bbox["x"][0]:
-                bbox["x"][0] = b[0]
-            if b[1] > bbox["x"][1]:
-                bbox["x"][1] = b[1]
-            if b[2] < bbox["y"][0]:
-                bbox["y"][0] = b[2]
-            if b[3] > bbox["y"][1]:
-                bbox["y"][1] = b[3]
-            if b[4] < bbox["z"][0]:
-                bbox["z"][0] = b[4]
-            if b[5] > bbox["z"][1]:
-                bbox["z"][1] = b[5]
+            if b[0] < bbox["x"][0]: bbox["x"][0] = b[0]
+            if b[1] > bbox["x"][1]: bbox["x"][1] = b[1]
+            if b[2] < bbox["y"][0]: bbox["y"][0] = b[2]
+            if b[3] > bbox["y"][1]: bbox["y"][1] = b[3]
+            if b[4] < bbox["z"][0]: bbox["z"][0] = b[4]
+            if b[5] > bbox["z"][1]: bbox["z"][1] = b[5]
 
             part_name = f"Part_{tag}"
             faces = []
             face_dimtags = gmsh.model.getBoundary([dim_tag], combined=True)
             for fd, ft in face_dimtags:
-                if ft < 0: continue  # Skip invalid entities
+                if ft < 0: continue
                 face_id = f"face_{tag}_{ft}"
                 try:
                     fb = gmsh.model.occ.getBoundingBox(fd, ft)
@@ -174,38 +164,37 @@ def _gmsh_step_to_obj(step_bytes: bytes, mesh_size: float, with_groups: bool = T
                 except Exception:
                     area = 0.0
                 faces.append({"id": face_id, "area": round(area, 2)})
-
             parts.append({"name": part_name, "tag": tag, "faces": faces})
 
-        # Generate mesh
+        # Generate VOLUME mesh (3D), then extract the outer skin
         gmsh.option.setNumber("Mesh.MeshSizeMin", mesh_size * 0.5)
         gmsh.option.setNumber("Mesh.MeshSizeMax", mesh_size)
         gmsh.option.setNumber("Mesh.MeshSizeFromCurvature", 12)
-        gmsh.model.mesh.generate(dim)
+        gmsh.model.mesh.generate(3)
 
-        # Export OBJ
-        obj_buf = io.BytesIO()
-        # Write simple OBJ with groups
-        nodes = gmsh.model.mesh.getNodes()
-        node_tags, node_coords, _ = nodes
+        # Get all triangle faces on the boundary (dim=2, entities that are on the boundary)
+        skin_faces = gmsh.model.mesh.getElementsByType(2)  # all 2D triangles
+        node_tags, node_coords, _ = gmsh.model.mesh.getNodes()
         node_map = {tag: i + 1 for i, tag in enumerate(node_tags)}
 
         obj_lines = []
-        # Vertices
         for i in range(0, len(node_coords), 3):
             obj_lines.append(f"v {node_coords[i]} {node_coords[i+1]} {node_coords[i+2]}")
 
-        # Faces by entity
-        all_entities = gmsh.model.getEntities(dim)
-        for d, tag in all_entities:
-            el_types, el_tags, el_node_tags = gmsh.model.mesh.getElements(d, tag)
-            obj_lines.append(f"g part_{tag}")
-            for et, ent, entags in zip(el_types, el_tags, el_node_tags):
-                # Map to OBJ face format
-                for j in range(0, len(entags), 3):
-                    v = [node_map.get(entags[j + k], 0) for k in range(3)]
-                    if all(v):
-                        obj_lines.append(f"f {v[0]} {v[1]} {v[2]}")
+        # Group triangles by which CAD face they belong to
+        all_faces_2d = gmsh.model.getEntities(2)
+        for fd, ftag in all_faces_2d:
+            try:
+                el_types, el_tags, el_node_tags = gmsh.model.mesh.getElements(fd, ftag)
+                obj_lines.append(f"g surface_{ftag}")
+                for et, ent, entags in zip(el_types, el_tags, el_node_tags):
+                    n_per_el = 3 if et == 2 else 4  # triangle or quad
+                    for j in range(0, len(entags), n_per_el):
+                        v = [node_map.get(entags[j+k], 0) for k in range(min(3, n_per_el))]
+                        if all(v):
+                            obj_lines.append(f"f {v[0]} {v[1]} {v[2]}")
+            except Exception:
+                continue
 
         obj_bytes = "\n".join(obj_lines).encode("utf-8")
         os.unlink(step_path)
