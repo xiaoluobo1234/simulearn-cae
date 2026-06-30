@@ -309,14 +309,14 @@ async def preview_model(file: UploadFile = File(...)):
     try:
         fine_bytes, _, _ = _gmsh_step_to_obj(content, mesh_size=2.0, dim=2)
         await minio_upload(f"previews/{task_id}/fine.obj", fine_bytes, "text/plain")
-        fine_obj_url = f"/api/cae/preview/{task_id}/fine.obj"
+        fine_obj_url = f"/api/cae/simulation/preview/{task_id}/fine.obj"
     except Exception:
         pass
 
     return {
         "task_id": task_id,
         "parts": parts,
-        "coarse_obj_url": f"/api/cae/preview/{task_id}/coarse.obj",
+        "coarse_obj_url": f"/api/cae/simulation/preview/{task_id}/coarse.obj",
         "fine_obj_url": fine_obj_url,
         "bounding_box": bbox,
     }
@@ -345,6 +345,6 @@ async def generate_mesh(body: MeshRequest):
     await minio_upload(mesh_key, obj_bytes, "text/plain")
 
     return MeshResponse(
-        obj_url=f"/api/cae/preview/{body.task_id}/mesh.obj",
+        obj_url=f"/api/cae/simulation/preview/{body.task_id}/mesh.obj",
         stats=stats,
     )
