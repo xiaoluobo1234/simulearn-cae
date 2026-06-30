@@ -57,10 +57,11 @@ services:
     volumes:
       - cae_miniodata:/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 20s
 
   # ── Backend API ──
   backend:
@@ -89,7 +90,7 @@ services:
       redis:
         condition: service_healthy
       minio:
-        condition: service_healthy
+        condition: service_started
 
   # ── Celery Worker ──
   worker:
