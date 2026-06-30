@@ -1,7 +1,7 @@
 #!/bin/bash
 # ============================================================
 # SimuLearn CAE — Server Deployment Script
-# Run on Alibaba Cloud ECS: bash deploy.sh
+# Usage: bash deploy.sh
 # ============================================================
 set -e
 
@@ -11,6 +11,19 @@ echo "======================================"
 # ── Check prerequisites ──
 command -v docker >/dev/null 2>&1 || { echo "❌ Docker not installed"; exit 1; }
 docker compose version >/dev/null 2>&1 || { echo "❌ docker compose not available"; exit 1; }
+
+# ── Create .env if missing ──
+if [ ! -f .env ]; then
+  echo "📝 Creating .env from .env.example..."
+  cp .env.example .env
+  # Generate random passwords
+  DB_PW=$(openssl rand -hex 16)
+  MINIO_PW=$(openssl rand -hex 16)
+  sed -i "s/YOUR_DB_PASSWORD/$DB_PW/" .env
+  sed -i "s/YOUR_MINIO_USER/cae_admin/" .env
+  sed -i "s/YOUR_MINIO_PASSWORD/$MINIO_PW/" .env
+  echo "   ✅ Generated secure passwords"
+fi
 
 # ── Check ports are free ──
 for port in 8000 3001 5433 6380 9002 9003; do
@@ -23,7 +36,7 @@ echo "✅ All ports available"
 
 # ── Build and start ──
 echo ""
-echo "📦 Building CAE images (this takes 3-5 minutes first time)..."
+echo "📦 Building CAE images (3-5 min first time)..."
 docker compose -f docker-compose.prod.yml build --parallel
 
 echo ""
@@ -32,7 +45,7 @@ docker compose -f docker-compose.prod.yml up -d
 
 echo ""
 echo "⏳ Waiting for services to be healthy..."
-sleep 8
+sleep 10
 
 # ── Health checks ──
 echo ""
@@ -44,13 +57,13 @@ echo "======================================"
 echo "✅ Deployment complete!"
 echo ""
 echo "📌 Endpoints:"
-echo "   Backend API:  http://$(hostname -I | awk '{print $1}'):8000"
-echo "   Backend Docs: http://$(hostname -I | awk '{print $1}'):8000/docs"
-echo "   Frontend:     http://$(hostname -I | awk '{print $1}'):3001"
-echo "   MinIO API:    http://$(hostname -I | awk '{print $1}'):9002"
-echo "   MinIO Console: http://$(hostname -I | awk '{print $1}'):9003"
+echo "   Backend API:  http://localhost:8000"
+echo "   Backend Docs: http://localhost:8000/docs"
+echo "   Frontend:     http://localhost:3001"
+echo "   MinIO Console: http://localhost:9003"
 echo ""
-echo "📝 Next steps:"
-echo "   1. Test: curl http://localhost:8000/health"
-echo "   2. Add Nginx reverse proxy for simulearn.cn/cae"
-echo "   3. Check logs: docker compose -f docker-compose.prod.yml logs -f"
+echo "🔧 Test: curl http://localhost:8000/health"
+echo "📋 Logs: docker compose -f docker-compose.prod.yml logs -f"
+echo ""
+echo "🔄 Future updates:"
+echo "   git pull && bash deploy.sh"
