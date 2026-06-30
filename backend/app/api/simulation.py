@@ -301,7 +301,7 @@ async def preview_model(file: UploadFile = File(...)):
     await minio_upload(f"previews/{task_id}/model.step", content, "application/octet-stream")
 
     # Generate coarse preview (fast, ~1s)
-    coarse_bytes, parts, bbox = _gmsh_step_to_obj(content, mesh_size=10.0, dim=2)
+    coarse_bytes, parts, bbox = _gmsh_step_to_obj(content, mesh_size=20.0, dim=2)
     await minio_upload(f"previews/{task_id}/coarse.obj", coarse_bytes, "text/plain")
 
     # Launch fine preview (best-effort)
